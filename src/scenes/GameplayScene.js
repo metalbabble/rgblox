@@ -48,6 +48,7 @@ export class GameplayScene extends Phaser.Scene {
     this.startLevel = data.level || 1;
     this.speedName  = data.speed || 'slow';
     this.musicType  = data.musicType || 'none';
+    this.touchMode  = data.touchMode || false;
   }
 
   preload() {
@@ -114,8 +115,15 @@ export class GameplayScene extends Phaser.Scene {
     this.moveTimer     = 0;
     this.fastDropTimer = 0;
 
+    // Touch button states
+    this.touchLeftDown   = false;
+    this.touchRightDown  = false;
+    this.touchDownDown   = false;
+    this.touchRotateJust = false;
+
     this._buildInfoPanel();
     this._buildGameOverOverlay();
+    if (this.touchMode) this._buildTouchButtons();
 
     this.dropTimer = null;
     this._initLevel();
@@ -873,6 +881,65 @@ export class GameplayScene extends Phaser.Scene {
     }
   }
 
+  // ── Touch buttons ─────────────────────────────────────────────────────────────
+
+  _buildTouchButtons() {
+    const cx = 870;   // diamond center X (right side, clear of info panel)
+    const cy = 510;   // diamond center Y
+    const gap = 82;   // distance from center to each button center
+    const r = 47;     // button radius
+    const depth = 500;
+
+    const btnColor = 0x1a3a6a;
+    const btnAlpha = 0.85;
+    const iconStyle = {
+      fontFamily: 'monospace',
+      fontSize: '34px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2
+    };
+
+    // Subtle background panel
+    const bg = this.add.graphics().setDepth(depth - 1);
+    bg.fillStyle(0x000000, 0.35);
+    bg.fillRoundedRect(cx - gap - r - 10, cy - gap - r - 10, (gap + r + 10) * 2, (gap + r + 10) * 2, 20);
+
+    const makeBtn = (x, y, icon, onDown, onUp) => {
+      const circle = this.add.circle(x, y, r, btnColor, btnAlpha).setDepth(depth).setInteractive();
+      this.add.text(x, y, icon, iconStyle).setOrigin(0.5, 0.5).setDepth(depth + 1);
+      circle.on('pointerdown',  onDown);
+      circle.on('pointerup',    onUp);
+      circle.on('pointerover',  () => circle.setFillStyle(0x2255aa, btnAlpha));
+      circle.on('pointerout',   () => { circle.setFillStyle(btnColor, btnAlpha); onUp(); });
+      return circle;
+    };
+
+    // Top: Rotate (↻)
+    makeBtn(cx, cy - gap, '↻',
+      () => { this.touchRotateJust = true; },
+      () => {}
+    );
+
+    // Left: Move left
+    makeBtn(cx - gap, cy, '←',
+      () => { this.touchLeftDown = true; },
+      () => { this.touchLeftDown = false; }
+    );
+
+    // Right: Move right
+    makeBtn(cx + gap, cy, '→',
+      () => { this.touchRightDown = true; },
+      () => { this.touchRightDown = false; }
+    );
+
+    // Bottom: Fast drop (↓)
+    makeBtn(cx, cy + gap, '↓',
+      () => { this.touchDownDown = true; },
+      () => { this.touchDownDown = false; }
+    );
+  }
+
   // ── Info panel ───────────────────────────────────────────────────────────────
 
   _buildInfoPanel() {
@@ -943,7 +1010,8 @@ export class GameplayScene extends Phaser.Scene {
       stroke: '#000000', strokeThickness: 2
     }).setOrigin(0.5, 0.5).setVisible(false).setDepth(1001);
 
-    this.goPrompt = this.add.text(cx, cy + 55, 'Press ENTER to Continue', {
+    const goPromptText = this.touchMode ? 'Tap or press ENTER to Continue' : 'Press ENTER to Continue';
+    this.goPrompt = this.add.text(cx, cy + 55, goPromptText, {
       fontFamily: 'monospace', fontSize: '20px', color: '#ffff00',
       stroke: '#000000', strokeThickness: 2
     }).setOrigin(0.5, 0.5).setVisible(false).setDepth(1001);
@@ -964,6 +1032,11 @@ export class GameplayScene extends Phaser.Scene {
     this.goScoreText.setText(`Score: ${this.score}`).setVisible(true);
     this.goPrompt.setVisible(true);
 
+    if (this.touchMode) {
+      this.touchGameOverTapped = false;
+      this.input.once('pointerdown', () => { this.touchGameOverTapped = true; });
+    }
+
     this.tweens.add({
       targets: this.goPrompt,
       alpha: 0,
@@ -978,8 +1051,9 @@ export class GameplayScene extends Phaser.Scene {
 
   update(_time, delta) {
     if (this.isGameOver) {
-      if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
-        this.scene.start('LevelSelectScene');
+      if (Phaser.Input.Keyboard.JustDown(this.enterKey) || this.touchGameOverTapped) {
+        this.touchGameOverTapped = false;
+        this.scene.start('LevelSelectScene', { touchMode: this.touchMode });
       }
       return;
     }
@@ -993,11 +1067,11 @@ export class GameplayScene extends Phaser.Scene {
     // Lateral movement with repeat delay
     this.moveTimer -= delta;
     if (this.moveTimer <= 0) {
-      if (this.cursors.left.isDown) {
+      if (this.cursors.left.isDown || this.touchLeftDown) {
         if (hasActivePiece) this._moveLeft();
         if (hasFragments)   this._moveFragmentsLeft();
         this.moveTimer = 120;
-      } else if (this.cursors.right.isDown) {
+      } else if (this.cursors.right.isDown || this.touchRightDown) {
         if (hasActivePiece) this._moveRight();
         if (hasFragments)   this._moveFragmentsRight();
         this.moveTimer = 120;
@@ -1007,13 +1081,14 @@ export class GameplayScene extends Phaser.Scene {
     }
 
     // Rotation (just-pressed)
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || this.touchRotateJust) {
+      this.touchRotateJust = false;
       if (hasActivePiece) this._rotatePiece();
       if (hasFragments)   this._rotateFragments();
     }
 
     // Fast drop
-    if (this.cursors.down.isDown) {
+    if (this.cursors.down.isDown || this.touchDownDown) {
       this.fastDropTimer -= delta;
       if (this.fastDropTimer <= 0) {
         if (hasActivePiece) this._stepDown();

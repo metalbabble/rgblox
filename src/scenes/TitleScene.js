@@ -37,7 +37,7 @@ export class TitleScene extends Phaser.Scene {
       'Align three or more of the same color to eliminate blocks.\n' +
       'Bomb blocks destroy all blocks of the same color.\n' +
       'The objective is to clear the stage of all blocks!\n\n' +
-      'Press ENTER to start!';
+      'Press ENTER or TAP to start!';
 
     this.add.text(W / 2, 390, instrText, {
       fontFamily: 'monospace',
@@ -59,8 +59,8 @@ export class TitleScene extends Phaser.Scene {
       strokeThickness: 2
     }).setOrigin(0.5, 0.5);
 
-    // Blinking "Press ENTER" indicator
-    const enterText = this.add.text(W / 2, 565, '▶  Press ENTER to start!  ◀', {
+    // Blinking "Press ENTER or TAP" indicator
+    const enterText = this.add.text(W / 2, 565, '▶  Press ENTER or TAP  ◀', {
       fontFamily: 'monospace',
       fontSize: '24px',
       color: '#ffff00',
@@ -77,11 +77,23 @@ export class TitleScene extends Phaser.Scene {
       repeat: -1
     });
 
-    // Enter key
+    this._started = false;
+
+    // Enter key → keyboard mode
     const enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     enterKey.once('down', () => {
+      if (this._started) return;
+      this._started = true;
       audioManager.playMenuBeep();
-      this.scene.start('LevelSelectScene');
+      this.scene.start('LevelSelectScene', { touchMode: false });
+    });
+
+    // Tap/click → touch mode
+    this.input.once('pointerdown', () => {
+      if (this._started) return;
+      this._started = true;
+      audioManager.playMenuBeep();
+      this.scene.start('LevelSelectScene', { touchMode: true });
     });
   }
 }

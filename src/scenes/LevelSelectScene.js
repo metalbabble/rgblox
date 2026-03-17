@@ -8,6 +8,10 @@ export class LevelSelectScene extends Phaser.Scene {
     super({ key: 'LevelSelectScene' });
   }
 
+  init(data) {
+    this.touchMode = (data && data.touchMode) ? true : false;
+  }
+
   preload() {
     this.load.image('levelselect', 'img/game/levelselect.png');
     this.load.audio('type1', 'music/type1.mp3');
@@ -38,6 +42,7 @@ export class LevelSelectScene extends Phaser.Scene {
 
     this._buildUI(W, H);
     this._setupKeys();
+    if (this.touchMode) this._setupTouchInteraction();
 
     // Start playing default music (Type 1)
     musicManager.play(this, 'type1');
@@ -78,6 +83,8 @@ export class LevelSelectScene extends Phaser.Scene {
     // Setting rows
     const labels = ['Starting Level', 'Speed', 'Music'];
     this.valueTexts = [];
+    this.leftArrows = [];
+    this.rightArrows = [];
 
     labels.forEach((label, i) => {
       const y = startY + textOffsetY + i * rowH;
@@ -87,11 +94,12 @@ export class LevelSelectScene extends Phaser.Scene {
         color: '#cccccc'
       }).setOrigin(0, 0.5);
 
-      this.add.text(panelX + 60, y, '◀', {
+      const leftArrow = this.add.text(panelX + 60, y, '◀', {
         fontFamily: 'monospace',
         fontSize: '22px',
         color: '#aaaaaa'
       }).setOrigin(0.5, 0.5);
+      this.leftArrows.push(leftArrow);
 
       const valText = this.add.text(panelX + 130, y, '', {
         fontFamily: 'monospace',
@@ -100,11 +108,12 @@ export class LevelSelectScene extends Phaser.Scene {
       }).setOrigin(0.5, 0.5);
       this.valueTexts.push(valText);
 
-      this.add.text(panelX + 200, y, '▶', {
+      const rightArrow = this.add.text(panelX + 200, y, '▶', {
         fontFamily: 'monospace',
         fontSize: '22px',
         color: '#aaaaaa'
       }).setOrigin(0.5, 0.5);
+      this.rightArrows.push(rightArrow);
     });
 
     // Button rows
@@ -189,8 +198,38 @@ export class LevelSelectScene extends Phaser.Scene {
       const musicIdx = this.settings.music.index;
       const musicType = musicIdx < 3 ? MUSIC_KEYS[musicIdx] : 'none';
 
-      this.scene.start('GameplayScene', { level, speed, musicType });
+      this.scene.start('GameplayScene', { level, speed, musicType, touchMode: this.touchMode });
     }
+  }
+
+  _setupTouchInteraction() {
+    this.leftArrows.forEach((arrow, i) => {
+      arrow.setInteractive({ useHandCursor: true }).setPadding(12);
+      arrow.on('pointerdown', () => {
+        this._moveCursor(i);
+        this._changeValue(-1);
+      });
+    });
+
+    this.rightArrows.forEach((arrow, i) => {
+      arrow.setInteractive({ useHandCursor: true }).setPadding(12);
+      arrow.on('pointerdown', () => {
+        this._moveCursor(i);
+        this._changeValue(1);
+      });
+    });
+
+    this.btnReturnText.setInteractive({ useHandCursor: true }).setPadding(16);
+    this.btnReturnText.on('pointerdown', () => {
+      this.cursorRow = 3;
+      this._activate();
+    });
+
+    this.btnStartText.setInteractive({ useHandCursor: true }).setPadding(16);
+    this.btnStartText.on('pointerdown', () => {
+      this.cursorRow = 4;
+      this._activate();
+    });
   }
 
   _setupKeys() {
